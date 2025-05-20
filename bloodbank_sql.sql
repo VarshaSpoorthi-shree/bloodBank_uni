@@ -211,3 +211,50 @@ INSERT INTO BloodTransfusion (PatientID, BloodID, TransfusionDate, EmployeeID) V
 (8, 8, '2023-05-01', 10);
 use bloodbank;
 select * from donor;
+-- Trigger 1: Update Donor's LastDonationDate after a new BloodDonation
+DELIMITER //
+CREATE TRIGGER UpdateLastDonation
+AFTER INSERT ON BloodDonation
+FOR EACH ROW
+BEGIN
+    UPDATE Donor
+    SET LastDonationDate = NEW.DonationDate
+    WHERE DonorID = NEW.DonorID;
+END;
+//
+DELIMITER ;
+
+-- Trigger 2: Insert a new Blood record after a new BloodDonation
+DELIMITER //
+CREATE TRIGGER CreateBloodRecord
+AFTER INSERT ON BloodDonation
+FOR EACH ROW
+BEGIN
+    INSERT INTO Blood (BloodType, DonationDate, ExpirationDate, Quantity, Status, Component)
+    VALUES (
+        (SELECT BloodType FROM Donor WHERE DonorID = NEW.DonorID),
+        NEW.DonationDate,
+        DATE_ADD(NEW.DonationDate, INTERVAL 42 DAY), -- Assuming a 42-day expiration for whole blood
+        1, -- Each donation is typically one unit
+        'Available',
+        'Whole Blood' -- You might want to capture component information if available
+    );
+END;
+//
+DELIMITER ;
+
+-- Trigger 3: Update BloodInventory after a new Blood record (assuming a link to a BloodBank)
+DELIMITER //
+CREATE TRIGGER UpdateBloodInventoryOnNewBlood
+AFTER INSERT ON Blood
+FOR EACH ROW
+BEGIN
+    
+    DECLARE default_blood_bank_id INT DEFAULT 1; 
+
+    INSERT INTO BloodInventory (BloodBankID, BloodID, Quantity, ExpirationDate)
+    VALUES (default_blood_bank_id, NEW.BloodID, NEW.Quantity, NEW.ExpirationDate)
+    ON DUPLICATE KEY UPDATE Quantity = Quantity + NEW.Quantity;
+END;
+//
+DELIMITER ;
